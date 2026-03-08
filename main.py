@@ -1,40 +1,42 @@
-import logging
-from aiogram import Bot, Dispatcher, types
-from aiogram.utils import executor
-import requests
+import telebot
+import os
 from flask import Flask
 from threading import Thread
-import os
 
-API_TOKEN = '8618465943:AAGBQ9tKWAbcaG8J1taZb1TEKpiykldi28M'
-logging.basicConfig(level=logging.INFO)
-bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+# 1. Telegram Bot Tokeningizni yozing
+TOKEN = '8618465943:AAGBQ9tKWAbcaG8J1taZb1TEKpiykldi28M'
+bot = telebot.TeleBot(TOKEN)
 
+# 2. Botingizni "tirik" saqlash uchun veb-server
 app = Flask('')
+
 @app.route('/')
 def home():
-    return "Bot yoniq!"
+    return "Bot tirik va ishlayapti!"
 
 def run():
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+    app.run(host='0.0.0.0', port=8080)
 
-@dp.message_handler(content_types=['web_app_data'])
-async def handle_webapp_data(message: types.Message):
-    url = message.web_app_data.data
-    await message.answer("🔍 Qidirilmoqda...")
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(f"{url.split('?')[0].rstrip('/')}/?__a=1&__d=dis", headers=headers, timeout=10)
-        if response.status_code == 200:
-            caption = response.json()['items'][0]['caption']['text']
-            await message.answer(f"✅ **Caption:**\n\n`{caption}`", parse_mode="Markdown")
-        else:
-            await message.answer("❌ Instagram ma'lumot bermadi.")
-    except Exception:
-        await message.answer("❌ Xatolik yuz berdi.")
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
 
-if __name__ == '__main__':
-    Thread(target=run).start()
-    executor.start_polling(dp, skip_updates=True)
-    
+# 3. Botingizning asosiy funksiyalari (Hashtag va Caption qismi)
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.reply_to(message, "Salom! Instagram link yuboring, men caption va hashtaglarni olib beraman.")
+
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
+    # Bu yerga avvalgi yozgan Instagram skriptingizni qo'shamiz
+    if "instagram.com" in message.text:
+        bot.reply_to(message, "Xozir ma'lumotlarni yuklayapman...")
+        # Instagramdan ma'lumot olish kodi shu yerda bo'ladi
+    else:
+        bot.reply_to(message, "Iltimos, faqat Instagram link yuboring.")
+
+# Botni ishga tushirish
+if __name__ == "__main__":
+    keep_alive() # Veb-serverni ishga tushiradi
+    print("Bot yoqildi...")
+    bot.infinity_polling() # Botni to'xtovsiz ishlashga majbur qiladi
