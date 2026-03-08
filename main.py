@@ -1,42 +1,53 @@
 import telebot
+import instaloader
 import os
 from flask import Flask
 from threading import Thread
 
-# 1. Telegram Bot Tokeningizni yozing
+# Bot sozlamalari
 TOKEN = '8618465943:AAGBQ9tKWAbcaG8J1taZb1TEKpiykldi28M'
 bot = telebot.TeleBot(TOKEN)
+L = instaloader.Instaloader()
 
-# 2. Botingizni "tirik" saqlash uchun veb-server
+# Render uchun oddiy server
 app = Flask('')
-
 @app.route('/')
-def home():
-    return "Bot tirik va ishlayapti!"
+def home(): return "Bot faol!"
 
 def run():
-    app.run(host='0.0.0.0', port=8080)
+    # Render avtomatik port beradi, bo'lmasa 10000 ishlatamiz
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
 
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
-
-# 3. Botingizning asosiy funksiyalari (Hashtag va Caption qismi)
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "Salom! Instagram link yuboring, men caption va hashtaglarni olib beraman.")
+    # reply_to o'rniga oddiy send_message ishlatamiz (xato bermasligi uchun)
+    bot.send_message(message.chat.id, "Salom! Instagram Reels yoki Post linkini yuboring.")
 
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    # Bu yerga avvalgi yozgan Instagram skriptingizni qo'shamiz
-    if "instagram.com" in message.text:
-        bot.reply_to(message, "Xozir ma'lumotlarni yuklayapman...")
-        # Instagramdan ma'lumot olish kodi shu yerda bo'ladi
-    else:
-        bot.reply_to(message, "Iltimos, faqat Instagram link yuboring.")
+@bot.message_handler(func=lambda message: 'instagram.com' in message.text)
+def get_info(message):
+    try:
+        msg = bot.send_message(message.chat.id, "Ma'lumot qidirilmoqda... 🔎")
+        url_parts = message.text.strip().split('/')
+        
+        # Shortcode ajratish
+        if 'reels' in url_parts:
+            shortcode = url_parts[url_parts.index('reels') + 1]
+        elif 'p' in url_parts:
+            shortcode = url_parts[url_parts.index('p') + 1]
+        else:
+            bot.edit_message_text("Faqat Reels yoki Post linkini yuboring.", message.chat.id, msg.message_id)
+            return
 
-# Botni ishga tushirish
+        post = instaloader.Post.from_shortcode(L.context, shortcode.split('?')[0])
+        caption = post.caption if post.caption else "Caption mavjud emas."
+        
+        bot.edit_message_text(f"✅ **Natija:**\n\n{caption}", message.chat.id, msg.message_id)
+    except Exception as e:
+        bot.send_message(message.chat.id, "Xatolik! Instagram ma'lumot bermadi yoki link noto'g'ri.")
+
 if __name__ == "__main__":
-    keep_alive() # Veb-serverni ishga tushiradi
-    print("Bot yoqildi...")
-    bot.infinity_polling() # Botni to'xtovsiz ishlashga majbur qiladi
+    Thread(target=run).start()
+    print("Bot ulanmoqda...")
+    bot.infinity_polling()
+    
